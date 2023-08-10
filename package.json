@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "nostr-tools": "^1.14.0",
+    "ws": "^8.13.0"
+  },
+  "scripts": {
+    "start": "node src/index.js"
+  }
+}
