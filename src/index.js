@@ -13,12 +13,27 @@ let connCount = 0
 let events = []
 let subs = new Map()
 
+let lastPurge = Date.now()
+
+if (process.env.PURGE_INTERVAL) {
+  console.log('Purging events every', process.env.PURGE_INTERVAL, 'seconds')
+  setInterval(() => {
+    lastPurge = Date.now()
+    events = []
+  }, process.env.PURGE_INTERVAL * 1000)
+}
+
 wss.on('connection', socket => {
   connCount += 1
 
   console.log('Received connection', {pid, connCount})
 
   const relay = new Instance(socket)
+
+  if (process.env.PURGE_INTERVAL) {
+    const now = Date.now()
+    relay.send(['NOTICE', '', 'Next purge in ' + Math.round((process.env.PURGE_INTERVAL * 1000 - (now - lastPurge)) / 1000) + ' seconds'])
+  }
 
   socket.on('message', msg => relay.handle(msg))
   socket.on('error', e => console.error("Received error on client socket", e))
