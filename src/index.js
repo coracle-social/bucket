@@ -59,7 +59,7 @@ class Instance {
     }
   }
   addSub(subId, filters) {
-    subs.set(subId, filters)
+    subs.set(subId, {instance: this, filters})
     this._subs.add(subId)
   }
   removeSub(subId) {
@@ -120,11 +120,11 @@ class Instance {
 
     this.send(['OK', event.id])
 
-    for (const [subId, filters] of subs.entries()) {
-      if (!this._subs.has(subId) && matchFilters(filters, event)) {
+    for (const [subId, {instance, filters}] of subs.entries()) {
+      if (matchFilters(filters, event)) {
         console.log('match', subId, event)
 
-        this.send(['EVENT', subId, event])
+        instance.send(['EVENT', subId, event])
       }
     }
   }
