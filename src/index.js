@@ -116,7 +116,7 @@ class Instance {
   onEVENT(event) {
     events.push(event)
 
-    console.log('EVENT', event)
+    console.log('EVENT', event, true)
 
     this.send(['OK', event.id])
 
