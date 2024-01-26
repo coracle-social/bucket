@@ -114,7 +114,7 @@ class Instance {
     this.send(['EOSE', subId])
   }
   onEVENT(event) {
-    events.push(event)
+    events = events.concat(event).sort((a, b) => a > b ? -1 : 1)
 
     console.log('EVENT', event, true)
 
