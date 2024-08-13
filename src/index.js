@@ -118,7 +118,7 @@ class Instance {
 
     console.log('EVENT', event, true)
 
-    this.send(['OK', event.id, true])
+    this.send(['OK', event.id, true, ""])
 
     for (const [subId, {instance, filters}] of subs.entries()) {
       if (matchFilters(filters, event)) {
