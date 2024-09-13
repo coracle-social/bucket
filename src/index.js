@@ -1,5 +1,5 @@
 const dotenv = require('dotenv')
-const {matchFilters} = require('nostr-tools')
+const {matchFilters, matchFilter} = require('nostr-tools')
 const {WebSocketServer} = require('ws')
 
 dotenv.config()
@@ -99,14 +99,24 @@ class Instance {
 
     this.addSub(subId, filters)
 
-    for (const event of events) {
-      if (matchFilters(filters, event)) {
-        console.log('match', subId, event)
-
-        this.send(['EVENT', subId, event])
-      } else {
-        console.log('miss', subId, event)
-      }
+    for (const filter of filters) {
+      let limitCount = filter.limit
+      for (const event of events) {
+        if (limitCount <= 0) {
+          console.log('miss', subId, event)
+          break
+        }
+        if (limitCount > 0 || limitCount == undefined) {
+          if (matchFilter(filter, event)) {
+            console.log('match', subId, event)
+              
+            this.send(['EVENT', subId, event])
+          } else {
+            console.log('miss', subId, event)
+          } 
+          limitCount = limitCount ? limitCount - 1 : undefined
+        } 
+      } 
     }
 
     console.log('EOSE')
