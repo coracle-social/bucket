@@ -101,11 +101,11 @@ class Instance {
 
     for (const filter of filters) {
       let limitCount = filter.limit
+      if (limitCount <= 0) {
+        console.log('miss events due to limit=0 on subscription:', subId)
+        continue
+      }
       for (const event of events) {
-        if (limitCount <= 0) {
-          console.log('miss', subId, event)
-          break
-        }
         if (limitCount > 0 || limitCount == undefined) {
           if (matchFilter(filter, event)) {
             console.log('match', subId, event)
