@@ -1,7 +1,7 @@
 {
   "dependencies": {
     "dotenv": "^16.3.1",
-    "nostr-tools": "^1.14.0",
+    "nostr-tools": "^2.7.2",
     "ws": "^8.13.0"
   },
   "scripts": {
