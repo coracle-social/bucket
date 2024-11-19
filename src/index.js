@@ -16,6 +16,7 @@ const server = http.createServer((req, res) => {
 
     res.end(JSON.stringify({
       name: "Bucket",
+      icon: "https://pfp.nostr.build/65b0af6eb8b103d11b2012d6215fe5a25d1eabc41e0a4dbc383ce02bd739cf28.png",
       description: "An ephemeral dev relay",
       pubkey: "c8a296e7633c87e2b5cb0fe37ffcccce00a4fb076fab1daea0077fcf88954f4e",
       software: "https://github.com/coracle-social/bucket",
