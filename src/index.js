@@ -1,13 +1,38 @@
+const http = require('http')
 const dotenv = require('dotenv')
 const {matchFilters, matchFilter} = require('nostr-tools')
 const {WebSocketServer} = require('ws')
 
 dotenv.config()
 
-const pid = Math.random().toString().slice(2, 8)
-const wss = new WebSocketServer({port: process.env.PORT})
+const server = http.createServer((req, res) => {
+  if (req.url === '/' && req.headers.accept === 'application/nostr+json') {
+    res.writeHead(200, {
+      'Content-Type': 'application/nostr+json',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Headers': '*',
+      'Access-Control-Allow-Methods': '*'
+    });
 
-console.log('Running on port', process.env.PORT)
+    res.end(JSON.stringify({
+      name: "Bucket",
+      description: "An ephemeral dev relay",
+      pubkey: "c8a296e7633c87e2b5cb0fe37ffcccce00a4fb076fab1daea0077fcf88954f4e",
+      software: "https://github.com/coracle-social/bucket",
+    }))
+  } else {
+    res.writeHead(404)
+    res.end('Not Found')
+  }
+})
+
+const pid = Math.random().toString().slice(2, 8)
+const wss = new WebSocketServer({server})
+
+server.listen(process.env.PORT, () => {
+  console.log('Running on port', process.env.PORT)
+})
+
 
 let connCount = 0
 let events = []
