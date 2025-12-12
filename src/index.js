@@ -1,6 +1,6 @@
 const http = require('http')
 const dotenv = require('dotenv')
-const {matchFilters, matchFilter} = require('nostr-tools')
+const {matchFilters} = require('nostr-tools')
 const {WebSocketServer} = require('ws')
 
 dotenv.config()
@@ -15,11 +15,12 @@ const server = http.createServer((req, res) => {
     });
 
     res.end(JSON.stringify({
-      name: "Bucket",
-      icon: "https://pfp.nostr.build/65b0af6eb8b103d11b2012d6215fe5a25d1eabc41e0a4dbc383ce02bd739cf28.png",
-      description: "An ephemeral dev relay",
-      pubkey: "c8a296e7633c87e2b5cb0fe37ffcccce00a4fb076fab1daea0077fcf88954f4e",
-      software: "https://github.com/coracle-social/bucket",
+      name: process.env.RELAY_NAME,
+      icon: process.env.RELAY_ICON,
+      pubkey: process.env.RELAY_PUBKEY,
+      description: process.env.RELAY_DESCRIPTION,
+      software: "https://github.com/coracle-social/broker",
+      supported_nips: [1, 11],
     }))
   } else {
     res.writeHead(404)
@@ -27,142 +28,78 @@ const server = http.createServer((req, res) => {
   }
 })
 
-const pid = Math.random().toString().slice(2, 8)
+const gsubs = new Map()
+const events = new Map()
 const wss = new WebSocketServer({server})
+
+setInterval(() => events.clear(), 30_000)
+
+wss.on('connection', socket => {
+  const conid = Math.random().toString().slice(2)
+  const lsubs = new Map()
+
+  const send = msg => socket.send(JSON.stringify(msg))
+
+  const makecb = (lsubid, filters) => event => {
+    if (matchFilters(filters, event)) {
+      send(['EVENT', lsubid, event])
+    }
+  }
+
+  socket.on('message', msg => {
+    try {
+      const message = JSON.parse(msg)
+
+      if (message[0] === 'EVENT') {
+        const event = message[1]
+
+        events.set(event.id, event)
+
+        for (const cb of gsubs.values()) {
+          cb(event)
+        }
+
+        send(['OK', event.id, true, ""])
+      }
+
+      if (message[0] === 'REQ') {
+        const lsubid = message[1]
+        const gsubid = `${conid}:${lsubid}`
+        const filters = message.slice(2)
+
+        lsubs.set(lsubid, gsubid)
+        gsubs.set(gsubid, makecb(lsubid, filters))
+
+        for (const event of events.values()) {
+          if (matchFilters(filters, event)) {
+            send(['EVENT', lsubid, event])
+          }
+        }
+
+        send(['EOSE', lsubid])
+      }
+
+      if (message[0] === 'CLOSE') {
+        const lsubid = message[1]
+        const gsubid = `${conid}:${lsubid}`
+
+        lsubs.delete(lsubid)
+        gsubs.delete(gsubid)
+      }
+    } catch (e) {
+      console.error(e)
+    }
+  })
+
+  socket.on('close', () => {
+    for (const [subid, gsubid] of lsubs.entries()) {
+      gsubs.delete(gsubid)
+    }
+
+    lsubs.clear()
+  })
+})
 
 server.listen(process.env.PORT, () => {
   console.log('Running on port', process.env.PORT)
 })
-
-
-let connCount = 0
-let events = []
-let subs = new Map()
-
-let lastPurge = Date.now()
-
-if (process.env.PURGE_INTERVAL) {
-  console.log('Purging events every', process.env.PURGE_INTERVAL, 'seconds')
-  setInterval(() => {
-    lastPurge = Date.now()
-    events = []
-  }, process.env.PURGE_INTERVAL * 1000)
-}
-
-wss.on('connection', socket => {
-  connCount += 1
-
-  console.log('Received connection', {pid, connCount})
-
-  const relay = new Instance(socket)
-
-  if (process.env.PURGE_INTERVAL) {
-    const now = Date.now()
-    relay.send(['NOTICE', '', 'Next purge in ' + Math.round((process.env.PURGE_INTERVAL * 1000 - (now - lastPurge)) / 1000) + ' seconds'])
-  }
-
-  socket.on('message', msg => relay.handle(msg))
-  socket.on('error', e => console.error("Received error on client socket", e))
-  socket.on('close', () => {
-    relay.cleanup()
-
-    connCount -= 1
-
-    console.log('Closing connection', {pid, connCount})
-  })
-})
-
-class Instance {
-  constructor(socket) {
-    this._socket = socket
-    this._subs = new Set()
-  }
-  cleanup() {
-    this._socket.close()
-
-    for (const subId of this._subs) {
-      this.removeSub(subId)
-    }
-  }
-  addSub(subId, filters) {
-    subs.set(subId, {instance: this, filters})
-    this._subs.add(subId)
-  }
-  removeSub(subId) {
-    subs.delete(subId)
-    this._subs.delete(subId)
-  }
-  send(message) {
-    this._socket.send(JSON.stringify(message))
-  }
-  handle(message) {
-    try {
-      message = JSON.parse(message)
-    } catch (e) {
-      this.send(['NOTICE', '', 'Unable to parse message'])
-    }
-
-    let verb, payload
-    try {
-      [verb, ...payload] = message
-    } catch (e) {
-      this.send(['NOTICE', '', 'Unable to read message'])
-    }
-
-    const handler = this[`on${verb}`]
-
-    if (handler) {
-      handler.call(this, ...payload)
-    } else {
-      this.send(['NOTICE', '', 'Unable to handle message'])
-    }
-  }
-  onCLOSE(subId) {
-    this.removeSub(subId)
-  }
-  onREQ(subId, ...filters) {
-    console.log('REQ', subId, ...filters)
-
-    this.addSub(subId, filters)
-
-    for (const filter of filters) {
-      let limitCount = filter.limit
-      if (limitCount <= 0) {
-        console.log('miss events due to limit=0 on subscription:', subId)
-        continue
-      }
-      for (const event of events) {
-        if (limitCount > 0 || limitCount == undefined) {
-          if (matchFilter(filter, event)) {
-            console.log('match', subId, event)
-              
-            this.send(['EVENT', subId, event])
-          } else {
-            console.log('miss', subId, event)
-          } 
-          limitCount = limitCount ? limitCount - 1 : undefined
-        } 
-      } 
-    }
-
-    console.log('EOSE')
-
-    this.send(['EOSE', subId])
-  }
-  onEVENT(event) {
-    events = events.concat(event).sort((a, b) => a > b ? -1 : 1)
-
-    console.log('EVENT', event, true)
-
-    this.send(['OK', event.id, true, ""])
-
-    for (const [subId, {instance, filters}] of subs.entries()) {
-      if (matchFilters(filters, event)) {
-        console.log('match', subId, event)
-
-        instance.send(['EVENT', subId, event])
-      }
-    }
-  }
-}
-
