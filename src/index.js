@@ -19,7 +19,7 @@ const server = http.createServer((req, res) => {
       icon: process.env.RELAY_ICON,
       pubkey: process.env.RELAY_PUBKEY,
       description: process.env.RELAY_DESCRIPTION,
-      software: "https://github.com/coracle-social/broker",
+      software: "https://github.com/coracle-social/bucket",
       supported_nips: [1, 11],
     }))
   } else {
