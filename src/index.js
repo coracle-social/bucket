@@ -115,6 +115,12 @@ wss.on('connection', socket => {
     }
   })
 
+  // ws closes the socket itself after errors like oversized payloads; without
+  // a listener the error is unhandled and takes down the whole process
+  socket.on('error', e => {
+    console.error(e.message)
+  })
+
   socket.on('close', () => {
     clearInterval(resetMessageCount)
 
