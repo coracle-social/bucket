@@ -31,6 +31,8 @@ const server = http.createServer((req, res) => {
 const MAX_SUBS = 10
 const MAX_MESSAGES_PER_MINUTE = 120
 const MAX_BUFFERED_BYTES = 1_000_000
+const MAX_GLOBAL_SUBS = 10_000
+const MAX_EVENTS = 50_000
 
 const gsubs = new Map()
 const events = new Map()
@@ -73,7 +75,9 @@ wss.on('connection', socket => {
           return send(['OK', event?.id, false, 'invalid: bad signature'])
         }
 
-        events.set(event.id, event)
+        if (events.size < MAX_EVENTS) {
+          events.set(event.id, event)
+        }
 
         for (const cb of gsubs.values()) {
           cb(event)
@@ -89,6 +93,10 @@ wss.on('connection', socket => {
 
         if (!lsubs.has(lsubid) && lsubs.size >= MAX_SUBS) {
           return send(['CLOSED', lsubid, 'rate-limited: too many subscriptions'])
+        }
+
+        if (!gsubs.has(gsubid) && gsubs.size >= MAX_GLOBAL_SUBS) {
+          return send(['CLOSED', lsubid, 'rate-limited: relay subscription capacity reached'])
         }
 
         lsubs.set(lsubid, gsubid)
