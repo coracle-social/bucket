@@ -1,6 +1,6 @@
 const http = require('http')
 const dotenv = require('dotenv')
-const {matchFilters} = require('nostr-tools')
+const {matchFilters, verifyEvent} = require('nostr-tools')
 const {WebSocketServer} = require('ws')
 
 dotenv.config()
@@ -28,17 +28,29 @@ const server = http.createServer((req, res) => {
   }
 })
 
+const MAX_SUBS = 10
+const MAX_MESSAGES_PER_MINUTE = 120
+const MAX_BUFFERED_BYTES = 1_000_000
+
 const gsubs = new Map()
 const events = new Map()
-const wss = new WebSocketServer({server})
+const wss = new WebSocketServer({server, maxPayload: 64 * 1024})
 
 setInterval(() => events.clear(), 30_000)
 
 wss.on('connection', socket => {
   const conid = Math.random().toString().slice(2)
   const lsubs = new Map()
+  let messageCount = 0
 
-  const send = msg => socket.send(JSON.stringify(msg))
+  const resetMessageCount = setInterval(() => { messageCount = 0 }, 60_000)
+
+  // Drop messages for clients that aren't keeping up rather than buffering them
+  const send = msg => {
+    if (socket.bufferedAmount < MAX_BUFFERED_BYTES) {
+      socket.send(JSON.stringify(msg))
+    }
+  }
 
   const makecb = (lsubid, filters) => event => {
     if (matchFilters(filters, event)) {
@@ -47,11 +59,19 @@ wss.on('connection', socket => {
   }
 
   socket.on('message', msg => {
+    if (++messageCount > MAX_MESSAGES_PER_MINUTE) {
+      return socket.close(1008, 'rate-limited')
+    }
+
     try {
       const message = JSON.parse(msg)
 
       if (message[0] === 'EVENT') {
         const event = message[1]
+
+        if (!verifyEvent(event)) {
+          return send(['OK', event?.id, false, 'invalid: bad signature'])
+        }
 
         events.set(event.id, event)
 
@@ -66,6 +86,10 @@ wss.on('connection', socket => {
         const lsubid = message[1]
         const gsubid = `${conid}:${lsubid}`
         const filters = message.slice(2)
+
+        if (!lsubs.has(lsubid) && lsubs.size >= MAX_SUBS) {
+          return send(['CLOSED', lsubid, 'rate-limited: too many subscriptions'])
+        }
 
         lsubs.set(lsubid, gsubid)
         gsubs.set(gsubid, makecb(lsubid, filters))
@@ -92,6 +116,8 @@ wss.on('connection', socket => {
   })
 
   socket.on('close', () => {
+    clearInterval(resetMessageCount)
+
     for (const [subid, gsubid] of lsubs.entries()) {
       gsubs.delete(gsubid)
     }
