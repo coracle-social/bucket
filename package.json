@@ -1,4 +1,8 @@
 {
+  "packageManager": "pnpm@12.15.0",
+  "engines": {
+    "node": ">=26"
+  },
   "dependencies": {
     "dotenv": "^16.3.1",
     "nostr-tools": "^2.7.2",

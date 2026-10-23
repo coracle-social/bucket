@@ -1,6 +1,6 @@
 A very simple relay for testing with nostr clients.
 
-`yarn && yarn start`
+`pnpm install && pnpm start`
 
 ## Configurations
 
